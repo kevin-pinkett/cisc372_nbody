@@ -22,10 +22,17 @@ void compute(){
 			}
 			else{
 				vector3 distance;
+				//calculate distances between bodies
 				for (k=0;k<3;k++) distance[k]=hPos[i][k]-hPos[j][k];
+
+				//calculate magnitude between bodies
 				double magnitude_sq=distance[0]*distance[0]+distance[1]*distance[1]+distance[2]*distance[2];
 				double magnitude=sqrt(magnitude_sq);
+
+				//calculate acceleration magnitude
 				double accelmag=-1*GRAV_CONSTANT*mass[j]/magnitude_sq;
+				
+				//store acceleration magnitude of j on i in accels[i][j]
 				FILL_VECTOR(accels[i][j],accelmag*distance[0]/magnitude,accelmag*distance[1]/magnitude,accelmag*distance[2]/magnitude);
 			}
 		}
@@ -35,12 +42,14 @@ void compute(){
 		vector3 accel_sum={0,0,0};
 		for (j=0;j<NUMENTITIES;j++){
 			for (k=0;k<3;k++)
+				//running sum of all accelerations based on every other entity
 				accel_sum[k]+=accels[i][j][k];
 		}
-		//compute the new velocity based on the acceleration and time interval
 		//compute the new position based on the velocity and time interval
 		for (k=0;k<3;k++){
+			//compute the new velocity based on the acceleration and time interval
 			hVel[i][k]+=accel_sum[k]*INTERVAL;
+			//compute the new position based on the velocity and time interval
 			hPos[i][k]+=hVel[i][k]*INTERVAL;
 		}
 	}
