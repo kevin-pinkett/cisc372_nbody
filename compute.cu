@@ -47,6 +47,29 @@ __global__ void pairwise_accels(vector3* d_hPos, double* mass, vector3* d_hAccel
 
 }
 
+__global__ void sum_accels(vector3* d_hAccels, vector3* accel_sum, int n){
+    //set which entity to iterate on
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    //ensure in scope
+    if (i > n){
+        return;
+    }
+
+    //sum for entity
+    vector3 sum = {0,0,0};
+    for (int j = 0; j < n; j++){
+        sum[0] += d_hAccels[i * n + j][0];
+        sum[1] += d_hAccels[i * n + j][1];
+        sum[2] += d_hAccels[i * n + j][2];
+    }
+
+    //store accel for entity
+    accel_sum[i][0] = sum[0];
+    accel_sum[i][1] = sum[1];
+    accel_sum[i][2] = sum[2];
+}
+
 //compute: Updates the positions and locations of the objects in the system based on gravity.
 //Parameters: None
 //Returns: None
