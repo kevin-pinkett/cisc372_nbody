@@ -3,6 +3,50 @@
 #include "vector.h"
 #include "config.h"
 
+__global__ void pairwise_accels(vector3* d_hPos, double* mass, vector3* d_hAccels, int n){
+    //set which entities to iterate on
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    //ensure blocks stay in scope
+    if (i >= n || j >= n){
+        return;
+    }
+
+    //no gravity on self
+    if (i == j){
+        FILL_VECTOR(d_hAccels[i * n + j], 0,0,0)
+    }
+    else {
+        vector3 d_dist;
+
+        //create distance vector
+        double dx = d_hPos[i][0] - d_hPos[j][0];
+        double dy = d_hPos[i][1] - d_hPos[j][1];
+        double dz = d_hPos[i][2] - d_hPos[j][2];
+        FILL_VECTOR(d_dist, dx,dy,dz);
+
+        //magnitude
+        double magnitude_sq = d_dist[0] * d_dist[0] + d_dist[1] * d_dist[1] + d_dist[2] * d_dist[2];
+        double magnitude = sqrt(magnitude_sq);
+
+        //acceleration magnitude
+        double accel_mag = -GRAV_CONSTANT * mass[j] / magnitude_sq;
+
+        //create acceleration vector
+        vector3 accel;
+        FILL_VECTOR(accel, accel_mag * d_dist[0] / magnitude,
+                           accel_mag * d_dist[1] / magnitude,
+                           accel_mag * d_dist[2] / magnitude);
+        
+        //store acceleration vector
+        d_hAccels[i * n + j][0] = accel[0];
+        d_hAccels[i * n + j][1] = accel[1];
+        d_hAccels[i * n + j][2] = accel[2];
+    }
+
+}
+
 //compute: Updates the positions and locations of the objects in the system based on gravity.
 //Parameters: None
 //Returns: None
