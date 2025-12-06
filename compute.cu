@@ -70,6 +70,39 @@ __global__ void sum_accels(vector3* d_hAccels, vector3* accel_sum, int n){
     accel_sum[i][2] = sum[2];
 }
 
+__global__ void update_positions(vector3* d_hPos, vector3* d_hVel, vector3* accel_sum, int n){
+    //set which entity to iterate on
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    //ensure in scope
+    if (i > n){
+        return;
+    }
+
+    //create vectors for updated values
+    vector3 new_v, new_p;
+    FILL_VECTOR(new_v, d_hVel[i][0], d_hVel[i][1], d_hVel[i][2]);
+    FILL_VECTOR(new_v, d_hPos[i][0], d_hPos[i][1], d_hPos[i][2]);
+
+    //update values
+    new_v[0] += accel_sum[i][0] * INTERVAL;
+    new_v[1] += accel_sum[i][1] * INTERVAL;
+    new_v[2] += accel_sum[i][2] * INTERVAL;
+
+    new_p[0] += new_v[0] * INTERVAL;
+    new_p[0] += new_v[1] * INTERVAL;
+    new_p[0] += new_v[2] * INTERVAL;
+
+    //store updated values
+    d_hVel[i][0] = new_v[0];
+    d_hVel[i][1] = new_v[1];
+    d_hVel[i][2] = new_v[2];
+
+    d_hPos[i][0] = new_p[0];
+    d_hPos[i][1] = new_p[1];
+    d_hPos[i][2] = new_p[2];
+}
+
 //compute: Updates the positions and locations of the objects in the system based on gravity.
 //Parameters: None
 //Returns: None
