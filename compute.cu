@@ -103,56 +103,51 @@ __global__ void update_positions(vector3* d_hPos, vector3* d_hVel, vector3* acce
     d_hPos[i][2] = new_p[2];
 }
 
-//compute: Updates the positions and locations of the objects in the system based on gravity.
-//Parameters: None
-//Returns: None
-//Side Effect: Modifies the hPos and hVel arrays with the new positions and accelerations after 1 INTERVAL
-void compute(){
-	//make an acceleration matrix which is NUMENTITIES squared in size;
-	int i,j,k;
-	vector3* values=(vector3*)malloc(sizeof(vector3)*NUMENTITIES*NUMENTITIES);
-	vector3** accels=(vector3**)malloc(sizeof(vector3*)*NUMENTITIES);
-	for (i=0;i<NUMENTITIES;i++)
-		accels[i]=&values[i*NUMENTITIES];
-	//first compute the pairwise accelerations.  Effect is on the first argument.
-	for (i=0;i<NUMENTITIES;i++){
-		for (j=0;j<NUMENTITIES;j++){
-			if (i==j) {
-				FILL_VECTOR(accels[i][j],0,0,0);
-			}
-			else{
-				vector3 distance;
-				//calculate distances between bodies
-				for (k=0;k<3;k++) distance[k]=hPos[i][k]-hPos[j][k];
+void compute() {
+    //device pointers
+    vector3* d_hPos;
+    vector3* d_hVel;
+    double* d_mass;
+    vector3* d_hAccels;
+    vector3* accel_sum;
 
-				//calculate magnitude between bodies
-				double magnitude_sq=distance[0]*distance[0]+distance[1]*distance[1]+distance[2]*distance[2];
-				double magnitude=sqrt(magnitude_sq);
+    size_t vecSize = sizeof(vector3) * NUMENTITIES;
+    size_t matSize = sizeof(vector3) * NUMENTITIES * NUMENTITIES;
 
-				//calculate acceleration magnitude
-				double accelmag=-1*GRAV_CONSTANT*mass[j]/magnitude_sq;
-				
-				//store acceleration magnitude of j on i in accels[i][j]
-				FILL_VECTOR(accels[i][j],accelmag*distance[0]/magnitude,accelmag*distance[1]/magnitude,accelmag*distance[2]/magnitude);
-			}
-		}
-	}
-	//sum up the rows of our matrix to get effect on each entity, then update velocity and position.
-	for (i=0;i<NUMENTITIES;i++){
-		vector3 accel_sum={0,0,0};
-		for (j=0;j<NUMENTITIES;j++){
-			for (k=0;k<3;k++)
-				//running sum of all accelerations based on every other entity
-				accel_sum[k]+=accels[i][j][k];
-		}
-		//compute the new position based on the velocity and time interval
-		for (k=0;k<3;k++){
-			//compute the new velocity based on the acceleration and time interval
-			hVel[i][k]+=accel_sum[k]*INTERVAL;
-			//compute the new position based on the velocity and time interval
-			hPos[i][k]+=hVel[i][k]*INTERVAL;
-		}
-	}
-	free(accels);
-	free(values);
+    //allocate device memory
+    cudaMalloc(&d_hPos, vecSize);
+    cudaMalloc(&d_hVel, vecSize);
+    cudaMalloc(&d_mass, sizeof(double) * NUMENTITIES);
+    cudaMalloc(&d_hAccels, matSize);
+    cudaMalloc(&accel_sum, vecSize);
+
+    //copy to device
+    cudaMemcpy(d_hPos, hPos, vecSize, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_hVel, hVel, vecSize, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_mass, mass, sizeof(double) * NUMENTITIES, cudaMemcpyHostToDevice);
+
+    //Pairwise acceleration calculation
+    dim3 blockDim(16,16);
+    dim3 gridDim((NUMENTITIES + blockDim.x - 1) / blockDim.x,
+                 (NUMENTITIES + blockDim.y - 1) / blockDim.y);
+    pairwise_accels<<<gridDim, blockDim>>>(d_hPos, d_mass, d_hAccels, NUMENTITIES);
+
+    //Sum accelerations calculation
+    int block1D = 256;
+    int grid1D = (NUMENTITIES + block1D - 1) / block1D;
+    sum_accels<<<grid1D, block1D>>>(d_hAccels, accel_sum, NUMENTITIES);
+
+    //Update positions and velocities
+    update_positions<<<grid1D, block1D>>>(d_hPos, d_hVel, accel_sum, NUMENTITIES);
+
+    //copy back to host
+    cudaMemcpy(hPos, d_hPos, vecSize, cudaMemcpyDeviceToHost);
+    cudaMemcpy(hVel, d_hVel, vecSize, cudaMemcpyDeviceToHost);
+
+    //free device memory
+    cudaFree(d_hPos);
+    cudaFree(d_hVel);
+    cudaFree(d_mass);
+    cudaFree(d_hAccels);
+    cudaFree(accel_sum);
 }
